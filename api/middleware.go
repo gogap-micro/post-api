@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 const apiRequestsKey = "apiRequestsKey"
@@ -13,6 +14,18 @@ type APIRequests struct {
 	Requests     []PostAPIRequest
 	IsMultiCall  bool
 	MajorVersion string
+}
+
+func (p *PostAPI) cors(next echo.HandlerFunc) echo.HandlerFunc {
+	return middleware.CORSWithConfig(
+		middleware.CORSConfig{
+			AllowOrigins:     p.Options.CORS.AllowOrigins,
+			AllowMethods:     p.Options.CORS.AllowMethods,
+			AllowHeaders:     p.Options.CORS.AllowHeaders,
+			AllowCredentials: p.Options.CORS.AllowCredentials,
+			ExposeHeaders:    p.Options.CORS.ExposeHeaders,
+			MaxAge:           p.Options.CORS.MaxAge,
+		})(next)
 }
 
 func (p *PostAPI) writeBasicHeaders(next echo.HandlerFunc) echo.HandlerFunc {

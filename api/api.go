@@ -50,20 +50,10 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	httpSrv.Get("/ping", postAPI.pingHandle)
 
-	corsMiddleware := middleware.CORSWithConfig(
-		middleware.CORSConfig{
-			AllowOrigins:     postAPI.Options.CORS.AllowOrigins,
-			AllowMethods:     postAPI.Options.CORS.AllowMethods,
-			AllowHeaders:     postAPI.Options.CORS.AllowHeaders,
-			AllowCredentials: postAPI.Options.CORS.AllowCredentials,
-			ExposeHeaders:    postAPI.Options.CORS.ExposeHeaders,
-			MaxAge:           postAPI.Options.CORS.MaxAge,
-		})
-
 	httpSrv.Use(
 		middleware.BodyLimit(postAPI.Options.BodyLimit),
 		postAPI.writeBasicHeaders,
-		corsMiddleware,
+		postAPI.cors,
 		postAPI.parseAPIRequests,
 	)
 
