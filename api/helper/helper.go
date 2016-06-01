@@ -2,7 +2,6 @@ package helper
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -49,7 +48,6 @@ func ToHandlerOption(fn interface{}, ver, api string, alias ...string) server.Ha
 	} else {
 		return func(o *server.HandlerOptions) {
 			o.Metadata[name] = map[string]string{APIMetadataKey: strAPIs, APIVerMetadataKey: ver}
-			fmt.Println(o.Metadata)
 		}
 	}
 

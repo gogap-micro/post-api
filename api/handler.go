@@ -39,6 +39,10 @@ type PostAPIRequest struct {
 	Content           map[string]interface{}
 }
 
+func (p *PostAPI) faviconICONHandle(c echo.Context) (err error) {
+	return c.String(http.StatusNotFound, "")
+}
+
 func (p *PostAPI) pingHandle(c echo.Context) (err error) {
 	return c.String(http.StatusOK, "pong")
 }
@@ -197,24 +201,30 @@ responseFor:
 
 func (p *PostAPI) errorHandle(err error, c echo.Context) {
 
-	var errCode errors.ErrCode
+	if c.Request().Method() == "POST" {
+		var errCode errors.ErrCode
 
-	if ec, ok := err.(errors.ErrCode); ok {
-		errCode = ec
-	} else {
-		errCode = ErrInternalServerError.New().Append(err)
-	}
+		if ec, ok := err.(errors.ErrCode); ok {
+			errCode = ec
+		} else {
+			errCode = ErrInternalServerError.New().
+				Append(err).
+				WithContext("URI", c.Request().URI()).
+				WithContext("Method", c.Request().Method())
+		}
 
-	resp := postAPIResponse{
-		Code:         errCode.Code(),
-		Message:      errCode.Error(),
-		ErrID:        errCode.Id(),
-		ErrNamespace: errCode.Namespace(),
-	}
-	c.JSON(http.StatusOK, resp)
+		resp := postAPIResponse{
+			Code:         errCode.Code(),
+			Message:      errCode.Error(),
+			ErrID:        errCode.Id(),
+			ErrNamespace: errCode.Namespace(),
+		}
 
-	if !c.Response().Committed() {
 		c.JSON(http.StatusOK, resp)
+
+		if !c.Response().Committed() {
+			c.JSON(http.StatusOK, resp)
+		}
 	}
 
 	p.httpSrv.Logger().Error(err)

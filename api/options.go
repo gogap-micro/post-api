@@ -50,6 +50,9 @@ type Options struct {
 	ResponseHeader http.Header
 	BodyLimit      string
 
+	TLSCertFile string
+	TLSKeyFile  string
+
 	Client    client.Client
 	Transport transport.Transport
 	Registry  registry.Registry
@@ -62,6 +65,13 @@ type Options struct {
 func Address(address string) Option {
 	return func(o *Options) {
 		o.Address = address
+	}
+}
+
+func TLSOptions(certFile, keyFile string) Option {
+	return func(o *Options) {
+		o.TLSCertFile = certFile
+		o.TLSKeyFile = keyFile
 	}
 }
 

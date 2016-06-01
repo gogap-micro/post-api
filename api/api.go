@@ -1,7 +1,7 @@
 package api
 
 import (
-	"path/filepath"
+	"github.com/labstack/echo/engine"
 	"sync"
 
 	"github.com/micro/go-micro/broker"
@@ -48,20 +48,19 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	httpSrv := echo.New()
 
-	httpSrv.Get("/ping", postAPI.pingHandle)
+	groupRoot := httpSrv.Group("/")
+	groupRoot.Get("ping", postAPI.pingHandle)
+	groupRoot.Get("favicon.ico", postAPI.faviconICONHandle)
 
-	httpSrv.Use(
+	groupAPI := httpSrv.Group(postAPI.Options.Path,
 		middleware.BodyLimit(postAPI.Options.BodyLimit),
 		postAPI.writeBasicHeaders,
-		postAPI.cors,
-		postAPI.parseAPIRequests,
-	)
+		postAPI.cors)
 
-	httpSrv.Use(postAPI.Options.BeforeHandlers...)
-	httpSrv.Use(postAPI.Options.AfterHandlers...)
+	handlers := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests}, postAPI.Options.BeforeHandlers...)
 
-	path := filepath.Join(postAPI.Options.Path, ":version")
-	httpSrv.Post(path, postAPI.rpcHandle)
+	groupAPI.Post("/:version", postAPI.rpcHandle, handlers...)
+	groupAPI.Use(postAPI.Options.AfterHandlers...)
 
 	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
 
@@ -95,7 +94,13 @@ func (p *PostAPI) Run() (err error) {
 		return
 	}
 
-	httpSrvEngine := fasthttp.New(p.Options.Address)
+	conf := engine.Config{
+		Address:     p.Options.Address,
+		TLSCertfile: p.Options.TLSCertFile,
+		TLSKeyfile:  p.Options.TLSKeyFile,
+	}
+
+	httpSrvEngine := fasthttp.WithConfig(conf)
 
 	go p.httpSrv.Run(httpSrvEngine)
 
