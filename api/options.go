@@ -48,6 +48,7 @@ type Options struct {
 	CORS           CORSOptions
 	Path           string
 	ResponseHeader http.Header
+	BodyLimit      string
 
 	Client    client.Client
 	Transport transport.Transport
@@ -95,6 +96,14 @@ func CORS(cors CORSOptions) Option {
 func Path(path string) Option {
 	return func(o *Options) {
 		o.Path = path
+	}
+}
+
+func BodyLimit(size string) Option {
+	return func(o *Options) {
+		if size == "" {
+			o.BodyLimit = "2M"
+		}
 	}
 }
 

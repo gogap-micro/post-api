@@ -32,7 +32,11 @@ type PostAPI struct {
 
 func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 	postAPI := PostAPI{
-		Options:    Options{},
+		Options: Options{
+			Address:   ":8088",
+			Path:      "/",
+			BodyLimit: "2M",
+		},
 		httpSrv:    nil,
 		apiService: make(map[string]map[string]microService),
 		stopedChan: make(chan struct{}),
@@ -56,7 +60,11 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 			MaxAge:           postAPI.Options.CORS.MaxAge,
 		})
 
-	httpSrv.Use(postAPI.writeBasicHeaders, corsMiddleware)
+	httpSrv.Use(
+		middleware.BodyLimit(postAPI.Options.BodyLimit),
+		postAPI.writeBasicHeaders,
+		corsMiddleware,
+	)
 
 	httpSrv.Use(postAPI.Options.BeforeHandlers...)
 	httpSrv.Use(postAPI.Options.AfterHandlers...)
