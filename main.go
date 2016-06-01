@@ -6,7 +6,7 @@ import (
 
 func main() {
 
-	api, _ := api.NewPostAPI(
+	postAPI, _ := api.NewPostAPI(
 		api.Address(":8088"),
 		api.CORS(api.CORSOptions{
 			AllowOrigins:     []string{"*"},
@@ -17,5 +17,5 @@ func main() {
 		api.Path("/api"),
 	)
 
-	api.Run()
+	postAPI.Run()
 }
