@@ -64,6 +64,7 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 		middleware.BodyLimit(postAPI.Options.BodyLimit),
 		postAPI.writeBasicHeaders,
 		corsMiddleware,
+		postAPI.parseAPIRequests,
 	)
 
 	httpSrv.Use(postAPI.Options.BeforeHandlers...)

@@ -1,9 +1,7 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
-	"golang.org/x/net/context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +10,7 @@ import (
 	"github.com/gogap/errors"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine"
+	"golang.org/x/net/context"
 
 	"github.com/micro/go-micro/metadata"
 )
@@ -33,7 +32,7 @@ type postAPIResponse struct {
 	Result            interface{} `json:"result"`
 }
 
-type postAPIRequest struct {
+type PostAPIRequest struct {
 	API               string
 	Version           string
 	IsSpecificVersion bool
@@ -57,90 +56,6 @@ func (p *PostAPI) getRequestTimeout(r engine.Request) time.Duration {
 	return time.Second * 30
 }
 
-func GetAPIRequests(c echo.Context) (apiRequests []postAPIRequest, isMultiCall bool, err error) {
-	multiCall := false
-	mcVal := strings.ToLower(c.Request().Header().Get(MultiCallHeader))
-	if mcVal != "" {
-		if mcVal == "on" ||
-			mcVal == "1" ||
-			mcVal == "true" {
-			multiCall = true
-		}
-	}
-
-	apiVersion := "v1"
-	requestVer := c.Param("version")
-	if requestVer != "" {
-		apiVersion = requestVer
-	}
-
-	// multi api calls
-	if multiCall {
-
-		var multiRequest map[string]map[string]interface{}
-
-		decoder := json.NewDecoder(c.Request().Body())
-		decoder.UseNumber()
-		if err = decoder.Decode(&multiRequest); err != nil {
-			return
-		}
-
-		if multiRequest != nil {
-			for tmpAPI, request := range multiRequest {
-
-				api := ""
-				ver := apiVersion
-				isSpecificVersion := false
-
-				apiV := strings.Split(tmpAPI, ":")
-				if len(apiV) == 2 {
-					ver = strings.TrimSpace(apiV[1])
-					isSpecificVersion = true
-				}
-
-				api = strings.TrimSpace(apiV[0])
-
-				if api == "" {
-					err = ErrBadRequest.New().Append("API name is empty")
-					return
-				}
-
-				apiRequests = append(apiRequests,
-					postAPIRequest{
-						API:               api,
-						Content:           request,
-						Version:           ver,
-						IsSpecificVersion: isSpecificVersion,
-					},
-				)
-			}
-		}
-
-		isMultiCall = true
-
-		return
-	}
-
-	// singal api call
-	api := c.Request().Header().Get(APIHeader)
-	api = strings.TrimSpace(api)
-	if api == "" {
-		err = ErrBadRequest.New().Append("API name is empty")
-		return
-	}
-
-	var request map[string]interface{}
-	decoder := json.NewDecoder(c.Request().Body())
-	decoder.UseNumber()
-	if err = decoder.Decode(&request); err != nil {
-		return
-	}
-
-	apiRequests = append(apiRequests, postAPIRequest{API: api, Content: request, Version: apiVersion})
-
-	return
-}
-
 func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 
 	badRequest := func(description string) {
@@ -158,27 +73,27 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		ct = ct[:idx]
 	}
 
-	var apiRequests []postAPIRequest
-	var isMultiCall bool
+	apiRequests := APIRequestsFromContext(c)
 
-	if apiRequests, isMultiCall, err = GetAPIRequests(c); err != nil {
+	if apiRequests == nil || apiRequests.Requests == nil {
+		err = ErrBadRequest.New().Append("empty request")
 		return
 	}
 
 	// create context
 	ctx := requestToContext(c.Request())
 
-	for _, apiRequest := range apiRequests {
-		if _, exist := p.getService(apiRequest.API, apiRequest.Version); !exist {
-			badRequest(fmt.Sprintf("api not exist, %s:%v", apiRequest.API, apiRequest.Version))
+	for _, req := range apiRequests.Requests {
+		if _, exist := p.getService(req.API, req.Version); !exist {
+			badRequest(fmt.Sprintf("api not exist, %s:%v", req.API, req.Version))
 			return
 		}
 	}
 
-	responsesChan := make(chan postAPIResponse, len(apiRequests))
+	responsesChan := make(chan postAPIResponse, len(apiRequests.Requests))
 
-	for _, apiRequest := range apiRequests {
-		go func(ctx context.Context, req postAPIRequest, responsesChan chan postAPIResponse) {
+	for _, request := range apiRequests.Requests {
+		go func(ctx context.Context, req PostAPIRequest, responsesChan chan postAPIResponse) {
 			var resp postAPIResponse
 			if srv, exist := p.getService(req.API, req.Version); !exist {
 				err := ErrBadRequest.New().Append(fmt.Sprintf("api not exist, %s:%v", req.API, req.Version))
@@ -205,7 +120,7 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 			default:
 			}
 
-		}(ctx, apiRequest, responsesChan)
+		}(ctx, request, responsesChan)
 	}
 
 	apiResponses := map[string]postAPIResponse{}
@@ -231,13 +146,13 @@ responseFor:
 				break responseFor
 			}
 		default:
-			if len(apiResponses) == len(apiRequests) {
+			if len(apiResponses) == len(apiRequests.Requests) {
 				break responseFor
 			}
 		}
 	}
 
-	for _, apiReq := range apiRequests {
+	for _, apiReq := range apiRequests.Requests {
 
 		api := apiReq.API
 		if apiReq.IsSpecificVersion {
@@ -267,12 +182,12 @@ responseFor:
 
 	var finallyResp postAPIResponse
 
-	if isMultiCall {
+	if apiRequests.IsMultiCall {
 		finallyResp.Code = 0
 		finallyResp.Message = ""
 		finallyResp.Result = apiResponses
 	} else {
-		finallyResp = apiResponses[apiRequests[0].API]
+		finallyResp = apiResponses[apiRequests.Requests[0].API]
 	}
 
 	c.JSON(http.StatusOK, finallyResp)
