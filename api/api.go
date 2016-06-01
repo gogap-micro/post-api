@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/labstack/echo/engine"
 	"sync"
 
 	"github.com/micro/go-micro/broker"
@@ -10,7 +9,9 @@ import (
 	"github.com/micro/go-micro/transport"
 
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/engine"
 	"github.com/labstack/echo/engine/fasthttp"
+	"github.com/labstack/echo/engine/standard"
 	"github.com/labstack/echo/middleware"
 )
 
@@ -36,6 +37,11 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 			Address:   ":8088",
 			Path:      "/",
 			BodyLimit: "2M",
+
+			Client:    client.DefaultClient,
+			Transport: transport.DefaultTransport,
+			Registry:  registry.DefaultRegistry,
+			Broker:    broker.DefaultBroker,
 		},
 		httpSrv:    nil,
 		apiService: make(map[string]map[string]microService),
@@ -66,22 +72,6 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	postAPI.httpSrv = httpSrv
 
-	if postAPI.Options.Client == nil {
-		postAPI.Options.Client = client.DefaultClient
-	}
-
-	if postAPI.Options.Transport == nil {
-		postAPI.Options.Transport = transport.DefaultTransport
-	}
-
-	if postAPI.Options.Registry == nil {
-		postAPI.Options.Registry = registry.DefaultRegistry
-	}
-
-	if postAPI.Options.Broker == nil {
-		postAPI.Options.Broker = broker.DefaultBroker
-	}
-
 	srv = &postAPI
 
 	return
@@ -100,9 +90,17 @@ func (p *PostAPI) Run() (err error) {
 		TLSKeyfile:  p.Options.TLSKeyFile,
 	}
 
-	httpSrvEngine := fasthttp.WithConfig(conf)
+	var echoEngine engine.Server
 
-	go p.httpSrv.Run(httpSrvEngine)
+	if p.Options.Engine == Fasthttp {
+		echoEngine = fasthttp.WithConfig(conf)
+	} else {
+		echoEngine = standard.WithConfig(conf)
+	}
+
+	p.httpSrv.SetLogger(wrapperLogger(p.Options.Logger))
+
+	go p.httpSrv.Run(echoEngine)
 
 	if err = p.watch(regWatcher); err != nil {
 		return

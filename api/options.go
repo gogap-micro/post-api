@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/Sirupsen/logrus"
 	"net/http"
 	"strings"
 
@@ -24,6 +25,13 @@ var internalAllowHeaders = []string{
 	MultiCallHeader,
 	APICallTimeoutHeader,
 }
+
+type EchoEngine int
+
+const (
+	Standard EchoEngine = 0
+	Fasthttp EchoEngine = 1
+)
 
 type XDomainOptions struct {
 	Path    string            `json:"path"`
@@ -50,6 +58,8 @@ type Options struct {
 	ResponseHeader http.Header
 	BodyLimit      string
 
+	Engine EchoEngine
+
 	TLSCertFile string
 	TLSKeyFile  string
 
@@ -60,6 +70,8 @@ type Options struct {
 
 	BeforeHandlers []echo.MiddlewareFunc
 	AfterHandlers  []echo.MiddlewareFunc
+
+	Logger *logrus.Logger
 }
 
 func Address(address string) Option {
@@ -103,6 +115,12 @@ func CORS(cors CORSOptions) Option {
 	}
 }
 
+func Engine(engine EchoEngine) Option {
+	return func(o *Options) {
+		o.Engine = engine
+	}
+}
+
 func Path(path string) Option {
 	return func(o *Options) {
 		o.Path = path
@@ -114,6 +132,12 @@ func BodyLimit(size string) Option {
 		if size == "" {
 			o.BodyLimit = "2M"
 		}
+	}
+}
+
+func Logger(logger *logrus.Logger) Option {
+	return func(o *Options) {
+		o.Logger = logger
 	}
 }
 
