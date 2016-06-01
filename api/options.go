@@ -119,7 +119,7 @@ func AfterHandler(middlewares ...echo.MiddlewareFunc) Option {
 	}
 }
 
-func Client(c client.Client) Option {
+func MicroClient(c client.Client) Option {
 	return func(o *Options) {
 		if c != nil {
 			o.Client = c
@@ -127,7 +127,7 @@ func Client(c client.Client) Option {
 	}
 }
 
-func Transport(t transport.Transport) Option {
+func MicroTransport(t transport.Transport) Option {
 	return func(o *Options) {
 		if t != nil {
 			o.Transport = t
@@ -135,13 +135,13 @@ func Transport(t transport.Transport) Option {
 	}
 }
 
-func Registry(r registry.Registry) Option {
+func MicroRegistry(r registry.Registry) Option {
 	return func(o *Options) {
 		o.Registry = r
 	}
 }
 
-func Broker(b broker.Broker) Option {
+func MicroBroker(b broker.Broker) Option {
 	return func(o *Options) {
 		o.Broker = b
 	}
