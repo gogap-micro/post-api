@@ -226,8 +226,6 @@ func (p *PostAPI) errorHandle(err error, c echo.Context) {
 			c.JSON(http.StatusOK, resp)
 		}
 	}
-
-	p.httpSrv.Logger().Error(err)
 }
 
 func (p *PostAPI) callMicroService(ctx context.Context, service, method string, request map[string]interface{}) (response postAPIResponse) {
