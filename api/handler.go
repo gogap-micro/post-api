@@ -57,7 +57,7 @@ func (p *PostAPI) getRequestTimeout(r engine.Request) time.Duration {
 	return time.Second * 30
 }
 
-func (p *PostAPI) getAPIRequests(c echo.Context) (apiRequests []postAPIRequest, isMultiCall bool, err error) {
+func GetAPIRequests(c echo.Context) (apiRequests []postAPIRequest, isMultiCall bool, err error) {
 	multiCall := false
 	mcVal := strings.ToLower(c.Request().Header().Get(MultiCallHeader))
 	if mcVal != "" {
@@ -185,7 +185,7 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 	var apiRequests []postAPIRequest
 	var isMultiCall bool
 
-	if apiRequests, isMultiCall, err = p.getAPIRequests(c); err != nil {
+	if apiRequests, isMultiCall, err = GetAPIRequests(c); err != nil {
 		errResponse(err)
 		return
 	}
