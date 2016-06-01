@@ -72,6 +72,10 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 	path := filepath.Join(postAPI.Options.Path, ":version")
 	httpSrv.Post(path, postAPI.rpcHandle)
 
+	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
+
+	postAPI.httpSrv = httpSrv
+
 	if postAPI.Options.Client == nil {
 		postAPI.Options.Client = client.DefaultClient
 	}
@@ -87,8 +91,6 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 	if postAPI.Options.Broker == nil {
 		postAPI.Options.Broker = broker.DefaultBroker
 	}
-
-	postAPI.httpSrv = httpSrv
 
 	srv = &postAPI
 

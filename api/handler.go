@@ -144,32 +144,8 @@ func GetAPIRequests(c echo.Context) (apiRequests []postAPIRequest, isMultiCall b
 func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 
 	badRequest := func(description string) {
-		badErr := ErrBadRequest.New().Append(description)
-		resp := postAPIResponse{
-			Code:         badErr.Code(),
-			Message:      badErr.Error(),
-			ErrID:        badErr.Id(),
-			ErrNamespace: badErr.Namespace(),
-		}
-		c.JSON(http.StatusOK, resp)
-	}
-
-	errResponse := func(e error) {
-		var errCode errors.ErrCode
-
-		if ec, ok := e.(errors.ErrCode); ok {
-			errCode = ec
-		} else {
-			errCode = ErrInternalServerError.New().Append(e)
-		}
-
-		resp := postAPIResponse{
-			Code:         errCode.Code(),
-			Message:      errCode.Error(),
-			ErrID:        errCode.Id(),
-			ErrNamespace: errCode.Namespace(),
-		}
-		c.JSON(http.StatusOK, resp)
+		err = ErrBadRequest.New().Append(description)
+		return
 	}
 
 	// response content type
@@ -186,7 +162,6 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 	var isMultiCall bool
 
 	if apiRequests, isMultiCall, err = GetAPIRequests(c); err != nil {
-		errResponse(err)
 		return
 	}
 
@@ -303,6 +278,31 @@ responseFor:
 	c.JSON(http.StatusOK, finallyResp)
 
 	return
+}
+
+func (p *PostAPI) errorHandle(err error, c echo.Context) {
+
+	var errCode errors.ErrCode
+
+	if ec, ok := err.(errors.ErrCode); ok {
+		errCode = ec
+	} else {
+		errCode = ErrInternalServerError.New().Append(err)
+	}
+
+	resp := postAPIResponse{
+		Code:         errCode.Code(),
+		Message:      errCode.Error(),
+		ErrID:        errCode.Id(),
+		ErrNamespace: errCode.Namespace(),
+	}
+	c.JSON(http.StatusOK, resp)
+
+	if !c.Response().Committed() {
+		c.JSON(http.StatusOK, resp)
+	}
+
+	p.httpSrv.Logger().Error(err)
 }
 
 func (p *PostAPI) callMicroService(ctx context.Context, service, method string, request map[string]interface{}) (response postAPIResponse) {
