@@ -69,6 +69,7 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 	groupAPI.Use(postAPI.Options.AfterHandlers...)
 
 	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
+	httpSrv.SetLogger(wrapperLogger(postAPI.Options.Logger))
 
 	postAPI.httpSrv = httpSrv
 
@@ -94,11 +95,10 @@ func (p *PostAPI) Run() (err error) {
 
 	if p.Options.Engine == Fasthttp {
 		echoEngine = fasthttp.WithConfig(conf)
+
 	} else {
 		echoEngine = standard.WithConfig(conf)
 	}
-
-	p.httpSrv.SetLogger(wrapperLogger(p.Options.Logger))
 
 	go p.httpSrv.Run(echoEngine)
 
