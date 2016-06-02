@@ -8,7 +8,10 @@ import (
 	"github.com/labstack/echo/middleware"
 )
 
-const apiRequestsKey = "apiRequestsKey"
+const (
+	apiRequestsKey = "apiRequestsKey"
+	responseKey    = "apiResponseKey"
+)
 
 type APIRequests struct {
 	Requests     []PostAPIRequest
@@ -66,6 +69,23 @@ func APIRequestsFromContext(c echo.Context) *APIRequests {
 
 	if requests, ok := v.(*APIRequests); ok {
 		return requests
+	}
+
+	return nil
+}
+
+func APIResponsesFromContext(c echo.Context) map[string]PostAPIResponse {
+	if !c.Contains(responseKey) {
+		return nil
+	}
+
+	v := c.Get(responseKey)
+	if v == nil {
+		return nil
+	}
+
+	if responses, ok := v.(map[string]PostAPIResponse); ok {
+		return responses
 	}
 
 	return nil

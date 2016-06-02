@@ -21,6 +21,7 @@ var internalAllowHeaders = []string{
 	"X-Requested-With",
 	"X-Forwarded-Payload",
 	"X-CSRF-Token",
+	"X-Request-Id",
 	APIHeader,
 	MultiCallHeader,
 	APICallTimeoutHeader,
@@ -70,6 +71,8 @@ type Options struct {
 
 	BeforeHandlers []echo.MiddlewareFunc
 	AfterHandlers  []echo.MiddlewareFunc
+
+	MicroHeaders []string
 
 	Logger *logrus.Logger
 }
@@ -158,6 +161,12 @@ func MicroClient(c client.Client) Option {
 		if c != nil {
 			o.Client = c
 		}
+	}
+}
+
+func MicroHeaders(headers ...string) Option {
+	return func(o *Options) {
+		o.MicroHeaders = distinctString(headers)
 	}
 }
 

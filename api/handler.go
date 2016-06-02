@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,7 +22,7 @@ const (
 	APICallTimeoutHeader = "X-Api-Call-Timeout"
 )
 
-type postAPIResponse struct {
+type PostAPIResponse struct {
 	api               string
 	version           string
 	isSpecificVersion bool
@@ -67,6 +68,13 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		return
 	}
 
+	apiRequests := APIRequestsFromContext(c)
+
+	if apiRequests == nil || apiRequests.Requests == nil {
+		err = ErrBadRequest.New().Append("empty request")
+		return
+	}
+
 	// response content type
 	// w.Header().Set("Content-Type", "application/json")
 
@@ -77,15 +85,15 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		ct = ct[:idx]
 	}
 
-	apiRequests := APIRequestsFromContext(c)
-
-	if apiRequests == nil || apiRequests.Requests == nil {
-		err = ErrBadRequest.New().Append("empty request")
-		return
-	}
-
 	// create context
-	ctx := requestToContext(c.Request())
+	ctx := requestToContext(c.Request(),
+		p.Options.MicroHeaders, map[string]string{
+			"Content-Type": ct,
+			"Client-IP":    c.Request().RemoteAddress(),
+			"Cookies":      jsonCookies(c.Request().Cookies()),
+			"User-Agent":   c.Request().UserAgent(),
+			"Request-Id":   c.Request().Header().Get("X-Request-Id"),
+		})
 
 	for _, req := range apiRequests.Requests {
 		if _, exist := p.getService(req.API, req.Version); !exist {
@@ -94,15 +102,15 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		}
 	}
 
-	responsesChan := make(chan postAPIResponse, len(apiRequests.Requests))
+	responsesChan := make(chan PostAPIResponse, len(apiRequests.Requests))
 
 	for _, request := range apiRequests.Requests {
-		go func(ctx context.Context, req PostAPIRequest, responsesChan chan postAPIResponse) {
-			var resp postAPIResponse
+		go func(ctx context.Context, req PostAPIRequest, responsesChan chan PostAPIResponse) {
+			var resp PostAPIResponse
 			if srv, exist := p.getService(req.API, req.Version); !exist {
 				err := ErrBadRequest.New().Append(fmt.Sprintf("api not exist, %s:%v", req.API, req.Version))
 
-				resp = postAPIResponse{
+				resp = PostAPIResponse{
 					ErrID:        err.Id(),
 					ErrNamespace: err.Namespace(),
 					Message:      err.Error(),
@@ -127,7 +135,7 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		}(ctx, request, responsesChan)
 	}
 
-	apiResponses := map[string]postAPIResponse{}
+	apiResponses := map[string]PostAPIResponse{}
 
 	callTimeout := p.getRequestTimeout(c.Request())
 
@@ -172,7 +180,7 @@ responseFor:
 				e = ErrInternalServerError.New().Append("response did not received")
 			}
 
-			apiResponses[api] = postAPIResponse{
+			apiResponses[api] = PostAPIResponse{
 				api:          apiReq.API,
 				version:      apiReq.Version,
 				Code:         e.Code(),
@@ -184,7 +192,9 @@ responseFor:
 		}
 	}
 
-	var finallyResp postAPIResponse
+	c.Set(apiRequestsKey, apiResponses)
+
+	var finallyResp PostAPIResponse
 
 	if apiRequests.IsMultiCall {
 		finallyResp.Code = 0
@@ -213,7 +223,7 @@ func (p *PostAPI) errorHandle(err error, c echo.Context) {
 				WithContext("Method", c.Request().Method())
 		}
 
-		resp := postAPIResponse{
+		resp := PostAPIResponse{
 			Code:         errCode.Code(),
 			Message:      errCode.Error(),
 			ErrID:        errCode.Id(),
@@ -228,7 +238,7 @@ func (p *PostAPI) errorHandle(err error, c echo.Context) {
 	}
 }
 
-func (p *PostAPI) callMicroService(ctx context.Context, service, method string, request map[string]interface{}) (response postAPIResponse) {
+func (p *PostAPI) callMicroService(ctx context.Context, service, method string, request map[string]interface{}) (response PostAPIResponse) {
 
 	var resp map[string]interface{}
 	req := p.Options.Client.NewJsonRequest(service, method, request)
@@ -250,15 +260,29 @@ func (p *PostAPI) callMicroService(ctx context.Context, service, method string, 
 	return
 }
 
-func requestToContext(r engine.Request) context.Context {
+func requestToContext(r engine.Request, headerKeys []string, basicHeaders map[string]string) context.Context {
 	ctx := context.Background()
 	md := make(metadata.Metadata)
 
-	headerKeys := r.Header().Keys()
-
 	for i := 0; i < len(headerKeys); i++ {
-		md[headerKeys[i]] = r.Header().Get(headerKeys[i])
+		v := r.Header().Get(headerKeys[i])
+		if v != "" {
+			md[headerKeys[i]] = r.Header().Get(headerKeys[i])
+		}
+	}
+
+	if basicHeaders != nil {
+		for k, v := range basicHeaders {
+			if k != "" && v != "" {
+				md[k] = v
+			}
+		}
 	}
 
 	return metadata.NewContext(ctx, md)
+}
+
+func jsonCookies(cookies []engine.Cookie) string {
+	b, _ := json.Marshal(cookies)
+	return string(b)
 }
