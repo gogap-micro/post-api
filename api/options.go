@@ -12,6 +12,11 @@ import (
 	"github.com/micro/go-micro/transport"
 )
 
+const (
+	DefaultRequestTopic  = "gogap.micro:topic:post-api:request"
+	DefaultResponseTopic = "gogap.micro:topic:post-api:response"
+)
+
 var internalAllowHeaders = []string{
 	"Origin",
 	"Content-Type",
@@ -72,7 +77,13 @@ type Options struct {
 	BeforeHandlers []echo.MiddlewareFunc
 	AfterHandlers  []echo.MiddlewareFunc
 
+	EnableRequestTopic  bool
+	EnableResponseTopic bool
+
 	MicroHeaders []string
+
+	ResponseTopic string
+	RequestTopic  string
 
 	Logger *logrus.Logger
 }
@@ -187,6 +198,36 @@ func MicroRegistry(r registry.Registry) Option {
 func MicroBroker(b broker.Broker) Option {
 	return func(o *Options) {
 		o.Broker = b
+	}
+}
+
+func EnableResponseTopic(enable bool) Option {
+	return func(o *Options) {
+		o.EnableResponseTopic = enable
+	}
+}
+
+func EnableRequestTopic(enable bool) Option {
+	return func(o *Options) {
+		o.EnableRequestTopic = enable
+	}
+}
+
+func Topic(requestTopic, responseTopic string) Option {
+	return func(o *Options) {
+		requestTopic = strings.TrimSpace(requestTopic)
+		responseTopic = strings.TrimSpace(responseTopic)
+
+		if requestTopic == "" {
+			requestTopic = DefaultRequestTopic
+		}
+
+		if responseTopic == "" {
+			responseTopic = DefaultResponseTopic
+		}
+
+		o.RequestTopic = requestTopic
+		o.ResponseTopic = responseTopic
 	}
 }
 

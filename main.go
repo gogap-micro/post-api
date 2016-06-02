@@ -15,6 +15,8 @@ func main() {
 		}),
 		api.ResponseHeader("Server", "post-api"),
 		api.Path("/api"),
+		api.EnableResponseTopic(true),
+		api.EnableRequestTopic(true),
 	)
 
 	postAPI.Run()

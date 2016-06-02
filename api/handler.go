@@ -86,14 +86,7 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 	}
 
 	// create context
-	ctx := requestToContext(c.Request(),
-		p.Options.MicroHeaders, map[string]string{
-			"Content-Type": ct,
-			"Client-IP":    c.Request().RemoteAddress(),
-			"Cookies":      jsonCookies(c.Request().Cookies()),
-			"User-Agent":   c.Request().UserAgent(),
-			"Request-Id":   c.Request().Header().Get("X-Request-Id"),
-		})
+	ctx := requestToContext(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": ct})
 
 	for _, req := range apiRequests.Requests {
 		if _, exist := p.getService(req.API, req.Version); !exist {
@@ -260,26 +253,37 @@ func (p *PostAPI) callMicroService(ctx context.Context, service, method string, 
 	return
 }
 
-func requestToContext(r engine.Request, headerKeys []string, basicHeaders map[string]string) context.Context {
-	ctx := context.Background()
-	md := make(metadata.Metadata)
+func requestToHeaders(r engine.Request, headerKeys []string, specHeaders map[string]string) map[string]string {
+
+	headers := map[string]string{
+		"Client-IP":  r.RemoteAddress(),
+		"Cookies":    jsonCookies(r.Cookies()),
+		"User-Agent": r.UserAgent(),
+		"Request-Id": r.Header().Get("X-Request-Id"),
+	}
 
 	for i := 0; i < len(headerKeys); i++ {
 		v := r.Header().Get(headerKeys[i])
 		if v != "" {
-			md[headerKeys[i]] = r.Header().Get(headerKeys[i])
+			headers[headerKeys[i]] = r.Header().Get(headerKeys[i])
 		}
 	}
 
-	if basicHeaders != nil {
-		for k, v := range basicHeaders {
-			if k != "" && v != "" {
-				md[k] = v
-			}
+	if specHeaders != nil {
+		for k, v := range specHeaders {
+			headers[k] = v
 		}
 	}
 
-	return metadata.NewContext(ctx, md)
+	return headers
+}
+
+func requestToContext(r engine.Request, headerKeys []string, specHeaders map[string]string) context.Context {
+	ctx := context.Background()
+
+	headers := requestToHeaders(r, headerKeys, specHeaders)
+
+	return metadata.NewContext(ctx, headers)
 }
 
 func jsonCookies(cookies []engine.Cookie) string {

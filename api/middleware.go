@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/micro/go-micro/broker"
 	"strings"
 
 	"github.com/labstack/echo"
@@ -54,6 +55,60 @@ func (p *PostAPI) parseAPIRequests(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Set(apiRequestsKey, requests)
 
 		return next(c)
+	}
+}
+
+func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+		if !p.Options.EnableRequestTopic || p.Options.Broker == nil {
+			return next(c)
+		}
+
+		requests := APIRequestsFromContext(c)
+		if requests == nil {
+			return next(c)
+		}
+
+		body, _ := json.Marshal(requests)
+
+		msg := &broker.Message{
+			Header: requestToHeaders(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": "application/json"}),
+			Body:   body,
+		}
+
+		p.Options.Broker.Publish(p.Options.RequestTopic, msg)
+
+		return next(c)
+	}
+}
+
+func (p *PostAPI) onResponseEvent(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) (err error) {
+
+		if !p.Options.EnableResponseTopic || p.Options.Broker == nil {
+			return next(c)
+		}
+
+		requests := APIRequestsFromContext(c)
+		if requests == nil {
+			return next(c)
+		}
+
+		responses := APIResponsesFromContext(c)
+		if responses == nil {
+			return next(c)
+		}
+
+		body, _ := json.Marshal(map[string]interface{}{"Requests": requests, "Responses": responses})
+
+		msg := &broker.Message{
+			Header: requestToHeaders(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": "application/json"}),
+			Body:   body,
+		}
+
+		p.Options.Broker.Publish(p.Options.ResponseTopic, msg)
+
+		return nil
 	}
 }
 

@@ -42,6 +42,9 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 			Transport: transport.DefaultTransport,
 			Registry:  registry.DefaultRegistry,
 			Broker:    broker.DefaultBroker,
+
+			RequestTopic:  DefaultRequestTopic,
+			ResponseTopic: DefaultResponseTopic,
 		},
 		httpSrv:    nil,
 		apiService: make(map[string]map[string]microService),
@@ -54,19 +57,22 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	httpSrv := echo.New()
 
-	groupRoot := httpSrv.Group("/")
-	groupRoot.Get("ping", postAPI.pingHandle)
-	groupRoot.Get("favicon.ico", postAPI.faviconICONHandle)
+	groupRoot := httpSrv.Group("")
+	groupRoot.Get("/ping", postAPI.pingHandle)
+	groupRoot.Get("/favicon.ico", postAPI.faviconICONHandle)
 
-	groupAPI := httpSrv.Group(postAPI.Options.Path,
+	groupAPI := groupRoot.Group(postAPI.Options.Path,
 		middleware.BodyLimit(postAPI.Options.BodyLimit),
 		postAPI.writeBasicHeaders,
 		postAPI.cors)
 
-	handlers := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests}, postAPI.Options.BeforeHandlers...)
+	beforeMiddlewares := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests, postAPI.onRequestEvent}, postAPI.Options.BeforeHandlers...)
 
-	groupAPI.Post("/:version", postAPI.rpcHandle, handlers...)
-	groupAPI.Use(postAPI.Options.AfterHandlers...)
+	afterMiddlerwres := append([]echo.MiddlewareFunc{postAPI.onResponseEvent}, postAPI.Options.AfterHandlers...)
+
+	groupAPI.Use(beforeMiddlewares...)
+	groupAPI.Post("/:version", postAPI.rpcHandle)
+	groupAPI.Use(afterMiddlerwres...)
 
 	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
 	httpSrv.SetLogger(wrapperLogger(postAPI.Options.Logger))
@@ -79,11 +85,6 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 }
 
 func (p *PostAPI) Run() (err error) {
-
-	var regWatcher registry.Watcher
-	if regWatcher, err = p.Options.Registry.Watch(); err != nil {
-		return
-	}
 
 	conf := engine.Config{
 		Address:     p.Options.Address,
@@ -101,6 +102,17 @@ func (p *PostAPI) Run() (err error) {
 	}
 
 	go p.httpSrv.Run(echoEngine)
+
+	if p.Options.Broker != nil {
+		if err = p.Options.Broker.Connect(); err != nil {
+			return
+		}
+	}
+
+	var regWatcher registry.Watcher
+	if regWatcher, err = p.Options.Registry.Watch(); err != nil {
+		return
+	}
 
 	if err = p.watch(regWatcher); err != nil {
 		return
