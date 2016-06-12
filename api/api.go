@@ -1,7 +1,9 @@
 package api
 
 import (
+	"github.com/micro/go-micro/selector"
 	"sync"
+	"time"
 
 	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/client"
@@ -29,6 +31,8 @@ type PostAPI struct {
 	apiService map[string]map[string]microService
 
 	reglocker sync.Mutex
+
+	timerPool sync.Pool
 }
 
 func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
@@ -36,12 +40,13 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 		Options: Options{
 			Address:   ":8088",
 			Path:      "/",
-			BodyLimit: "2M",
+			BodyLimit: "1M",
 
 			Client:    client.DefaultClient,
 			Transport: transport.DefaultTransport,
 			Registry:  registry.DefaultRegistry,
 			Broker:    broker.DefaultBroker,
+			Selector:  selector.DefaultSelector,
 
 			RequestTopic:  DefaultRequestTopic,
 			ResponseTopic: DefaultResponseTopic,
@@ -49,6 +54,8 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 		httpSrv:    nil,
 		apiService: make(map[string]map[string]microService),
 		stopedChan: make(chan struct{}),
+
+		timerPool: sync.Pool{New: func() interface{} { t := time.NewTimer(time.Second * 30); t.Stop(); return t }},
 	}
 
 	for _, opt := range opts {
@@ -57,22 +64,21 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	httpSrv := echo.New()
 
+	httpSrv.Use(middleware.BodyLimit(postAPI.Options.BodyLimit))
+
 	groupRoot := httpSrv.Group("")
 	groupRoot.Get("/ping", postAPI.pingHandle)
 	groupRoot.Get("/favicon.ico", postAPI.faviconICONHandle)
 
-	groupAPI := groupRoot.Group(postAPI.Options.Path,
-		middleware.BodyLimit(postAPI.Options.BodyLimit),
+	groupAPI := groupRoot.Group(
+		postAPI.Options.Path,
 		postAPI.writeBasicHeaders,
-		postAPI.cors)
+		postAPI.cors,
+	)
 
-	beforeMiddlewares := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests, postAPI.onRequestEvent}, postAPI.Options.BeforeHandlers...)
+	middlewares := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests, postAPI.onRequestEvent}, postAPI.Options.Middlewares...)
 
-	afterMiddlerwres := append([]echo.MiddlewareFunc{postAPI.onResponseEvent}, postAPI.Options.AfterHandlers...)
-
-	groupAPI.Use(beforeMiddlewares...)
-	groupAPI.Post("/:version", postAPI.rpcHandle)
-	groupAPI.Use(afterMiddlerwres...)
+	groupAPI.Post("/:version", postAPI.rpcHandle, middlewares...)
 
 	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
 	httpSrv.SetLogger(wrapperLogger(postAPI.Options.Logger))
@@ -85,6 +91,22 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 }
 
 func (p *PostAPI) Run() (err error) {
+
+	if err = p.Options.Client.Init(client.Transport(p.Options.Transport)); err != nil {
+		return
+	}
+
+	if err = p.Options.Client.Init(client.Registry(p.Options.Registry)); err != nil {
+		return
+	}
+
+	if err = p.Options.Client.Init(client.Selector(p.Options.Selector)); err != nil {
+		return
+	}
+
+	if err = p.Options.Broker.Init(broker.Registry(p.Options.Registry)); err != nil {
+		return
+	}
 
 	conf := engine.Config{
 		Address:     p.Options.Address,

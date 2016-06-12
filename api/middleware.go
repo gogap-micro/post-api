@@ -59,7 +59,10 @@ func (p *PostAPI) parseAPIRequests(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
+
 	return func(c echo.Context) (err error) {
+
+		// before request
 		if !p.Options.EnableRequestTopic || p.Options.Broker == nil {
 			return next(c)
 		}
@@ -69,46 +72,40 @@ func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		}
 
-		body, _ := json.Marshal(requests)
+		reqBody, _ := json.Marshal(requests)
 
-		msg := &broker.Message{
+		reqMsg := &broker.Message{
 			Header: requestToHeaders(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": "application/json"}),
-			Body:   body,
+			Body:   reqBody,
 		}
 
-		p.Options.Broker.Publish(p.Options.RequestTopic, msg)
+		p.Options.Broker.Publish(p.Options.RequestTopic, reqMsg)
 
-		return next(c)
-	}
-}
+		// process others
+		if next(c) != nil {
+			return
+		}
 
-func (p *PostAPI) onResponseEvent(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) (err error) {
-
+		// after request
 		if !p.Options.EnableResponseTopic || p.Options.Broker == nil {
-			return next(c)
-		}
-
-		requests := APIRequestsFromContext(c)
-		if requests == nil {
-			return next(c)
+			return
 		}
 
 		responses := APIResponsesFromContext(c)
 		if responses == nil {
-			return next(c)
+			return
 		}
 
-		body, _ := json.Marshal(map[string]interface{}{"Requests": requests, "Responses": responses})
+		respbody, _ := json.Marshal(map[string]interface{}{"Requests": requests, "Responses": responses})
 
-		msg := &broker.Message{
+		respMsg := &broker.Message{
 			Header: requestToHeaders(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": "application/json"}),
-			Body:   body,
+			Body:   respbody,
 		}
 
-		p.Options.Broker.Publish(p.Options.ResponseTopic, msg)
+		p.Options.Broker.Publish(p.Options.ResponseTopic, respMsg)
 
-		return nil
+		return
 	}
 }
 

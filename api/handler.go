@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/engine"
 	"golang.org/x/net/context"
 
+	microErrors "github.com/micro/go-micro/errors"
 	"github.com/micro/go-micro/metadata"
 )
 
@@ -85,8 +86,11 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		ct = ct[:idx]
 	}
 
+	callTimeout := p.getRequestTimeout(c.Request())
+	strTimeout := strconv.Itoa(int(callTimeout.Nanoseconds() / 1000000))
+
 	// create context
-	ctx := requestToContext(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": ct})
+	ctx := requestToContext(c.Request(), p.Options.MicroHeaders, map[string]string{"Content-Type": ct, "Timeout": strTimeout})
 
 	for _, req := range apiRequests.Requests {
 		if _, exist := p.getService(req.API, req.Version); !exist {
@@ -95,10 +99,17 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 		}
 	}
 
-	responsesChan := make(chan PostAPIResponse, len(apiRequests.Requests))
+	reqCount := len(apiRequests.Requests)
+	responsesChan := make(chan PostAPIResponse, reqCount)
+	defer close(responsesChan)
 
 	for _, request := range apiRequests.Requests {
 		go func(ctx context.Context, req PostAPIRequest, responsesChan chan PostAPIResponse) {
+
+			defer func() {
+				recover()
+			}()
+
 			var resp PostAPIResponse
 			if srv, exist := p.getService(req.API, req.Version); !exist {
 				err := ErrBadRequest.New().Append(fmt.Sprintf("api not exist, %s:%v", req.API, req.Version))
@@ -130,12 +141,15 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 
 	apiResponses := map[string]PostAPIResponse{}
 
-	callTimeout := p.getRequestTimeout(c.Request())
-
 	isTimeout := false
 
+	timer := p.timerPool.Get().(*time.Timer)
+	defer p.timerPool.Put(timer)
+
+	timer.Reset(callTimeout)
+
 responseFor:
-	for {
+	for i := 0; i < reqCount; i++ {
 		select {
 		case resp := <-responsesChan:
 			{
@@ -145,13 +159,10 @@ responseFor:
 				}
 				apiResponses[api] = resp
 			}
-		case <-time.After(callTimeout):
+		case <-timer.C:
 			{
+				timer.Stop()
 				isTimeout = true
-				break responseFor
-			}
-		default:
-			if len(apiResponses) == len(apiRequests.Requests) {
 				break responseFor
 			}
 		}
@@ -232,13 +243,29 @@ func (p *PostAPI) errorHandle(err error, c echo.Context) {
 }
 
 func (p *PostAPI) callMicroService(ctx context.Context, service, method string, request map[string]interface{}) (response PostAPIResponse) {
-
 	var resp map[string]interface{}
 	req := p.Options.Client.NewJsonRequest(service, method, request)
+
 	if err := p.Options.Client.Call(ctx, req, &resp); err != nil {
-		if errCode, ok := err.(errors.ErrCode); !ok {
-			err = ErrInternalServerError.New().Append(err)
-		} else {
+
+		switch e := err.(type) {
+		case errors.ErrCode:
+			{
+				response.Code = e.Code()
+				response.ErrID = e.Id()
+				response.ErrNamespace = e.Namespace()
+				response.Message = e.Error()
+			}
+		case *microErrors.Error:
+			{
+				errCode := ErrInternalServerError.New().Append(e.Detail).WithContext("internal_error", e)
+				response.Code = errCode.Code()
+				response.ErrID = errCode.Id()
+				response.ErrNamespace = errCode.Namespace()
+				response.Message = errCode.Error()
+			}
+		default:
+			errCode := ErrInternalServerError.New().Append(err)
 			response.Code = errCode.Code()
 			response.ErrID = errCode.Id()
 			response.ErrNamespace = errCode.Namespace()

@@ -2,7 +2,9 @@ package api
 
 import (
 	"github.com/Sirupsen/logrus"
+	"github.com/micro/go-micro/selector"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/labstack/echo"
@@ -69,13 +71,16 @@ type Options struct {
 	TLSCertFile string
 	TLSKeyFile  string
 
+	MicroTLSCertFile string
+	MicroTLSKeyFile  string
+
 	Client    client.Client
 	Transport transport.Transport
 	Registry  registry.Registry
 	Broker    broker.Broker
+	Selector  selector.Selector
 
-	BeforeHandlers []echo.MiddlewareFunc
-	AfterHandlers  []echo.MiddlewareFunc
+	Middlewares []echo.MiddlewareFunc
 
 	EnableRequestTopic  bool
 	EnableResponseTopic bool
@@ -98,6 +103,13 @@ func TLSOptions(certFile, keyFile string) Option {
 	return func(o *Options) {
 		o.TLSCertFile = certFile
 		o.TLSKeyFile = keyFile
+	}
+}
+
+func TLSOptionsFromEnv(cert, key string) Option {
+	return func(o *Options) {
+		o.TLSCertFile = os.Getenv(cert)
+		o.TLSKeyFile = os.Getenv(key)
 	}
 }
 
@@ -155,15 +167,9 @@ func Logger(logger *logrus.Logger) Option {
 	}
 }
 
-func BeforeHandler(middlewares ...echo.MiddlewareFunc) Option {
+func Middlewares(middlewares ...echo.MiddlewareFunc) Option {
 	return func(o *Options) {
-		o.BeforeHandlers = append(o.BeforeHandlers, middlewares...)
-	}
-}
-
-func AfterHandler(middlewares ...echo.MiddlewareFunc) Option {
-	return func(o *Options) {
-		o.AfterHandlers = append(o.AfterHandlers, middlewares...)
+		o.Middlewares = append(o.Middlewares, middlewares...)
 	}
 }
 
@@ -185,6 +191,10 @@ func MicroTransport(t transport.Transport) Option {
 	return func(o *Options) {
 		if t != nil {
 			o.Transport = t
+
+			if o.Client != nil {
+				o.Client.Init(client.Transport(t))
+			}
 		}
 	}
 }
@@ -192,6 +202,27 @@ func MicroTransport(t transport.Transport) Option {
 func MicroRegistry(r registry.Registry) Option {
 	return func(o *Options) {
 		o.Registry = r
+
+		if o.Client != nil {
+			o.Client.Init(client.Registry(r))
+		}
+	}
+}
+
+func MicroSelector(s selector.Selector) Option {
+	return func(o *Options) {
+		o.Selector = s
+
+		if o.Client != nil {
+			o.Client.Init(client.Selector(s))
+		}
+	}
+}
+
+func MicroTLSOptions(certFile, keyFile string) Option {
+	return func(o *Options) {
+		o.MicroTLSCertFile = certFile
+		o.MicroTLSKeyFile = keyFile
 	}
 }
 
