@@ -61,7 +61,6 @@ func (p *PostAPI) parseAPIRequests(next echo.HandlerFunc) echo.HandlerFunc {
 func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 
 	return func(c echo.Context) (err error) {
-
 		// before request
 		if !p.Options.EnableRequestTopic || p.Options.Broker == nil {
 			return next(c)
@@ -110,10 +109,6 @@ func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func APIRequestsFromContext(c echo.Context) *APIRequests {
-	if !c.Contains(apiRequestsKey) {
-		return nil
-	}
-
 	v := c.Get(apiRequestsKey)
 	if v == nil {
 		return nil
@@ -127,10 +122,6 @@ func APIRequestsFromContext(c echo.Context) *APIRequests {
 }
 
 func APIResponsesFromContext(c echo.Context) map[string]PostAPIResponse {
-	if !c.Contains(responseKey) {
-		return nil
-	}
-
 	v := c.Get(responseKey)
 	if v == nil {
 		return nil

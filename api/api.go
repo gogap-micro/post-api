@@ -110,8 +110,8 @@ func (p *PostAPI) Run() (err error) {
 
 	conf := engine.Config{
 		Address:     p.Options.Address,
-		TLSCertfile: p.Options.TLSCertFile,
-		TLSKeyfile:  p.Options.TLSKeyFile,
+		TLSCertFile: p.Options.TLSCertFile,
+		TLSKeyFile:  p.Options.TLSKeyFile,
 	}
 
 	var echoEngine engine.Server
