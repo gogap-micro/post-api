@@ -249,13 +249,6 @@ func (p *PostAPI) callMicroService(ctx context.Context, service, method string, 
 	if err := p.Options.Client.Call(ctx, req, &resp); err != nil {
 
 		switch e := err.(type) {
-		case errors.ErrCode:
-			{
-				response.Code = e.Code()
-				response.ErrID = e.Id()
-				response.ErrNamespace = e.Namespace()
-				response.Message = e.Error()
-			}
 		case *microErrors.Error:
 			{
 				errCode := ErrInternalServerError.New().Append(e.Detail).WithContext("internal_error", e)
@@ -263,15 +256,29 @@ func (p *PostAPI) callMicroService(ctx context.Context, service, method string, 
 				response.ErrID = errCode.Id()
 				response.ErrNamespace = errCode.Namespace()
 				response.Message = errCode.Error()
+				return
 			}
 		default:
-			errCode := ErrInternalServerError.New().Append(err)
-			response.Code = errCode.Code()
-			response.ErrID = errCode.Id()
-			response.ErrNamespace = errCode.Namespace()
-			response.Message = errCode.Error()
+			strErr := err.Error()
+			if len(strErr) > 0 {
+				var gogapErr errors.Error
+				if je := json.Unmarshal([]byte(strErr), &gogapErr); je == nil {
+					if gogapErr.Code > 0 && len(gogapErr.ID) > 0 && len(gogapErr.Namespace) > 0 {
+						response.Code = gogapErr.Code
+						response.ErrID = gogapErr.ID
+						response.ErrNamespace = gogapErr.Namespace
+						response.Message = gogapErr.Message
+						return
+					}
+				}
+			}
 		}
 
+		errCode := ErrInternalServerError.New().Append(err)
+		response.Code = errCode.Code()
+		response.ErrID = errCode.Id()
+		response.ErrNamespace = errCode.Namespace()
+		response.Message = errCode.Error()
 		return
 	}
 
