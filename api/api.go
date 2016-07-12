@@ -72,13 +72,12 @@ func NewPostAPI(opts ...Option) (srv *PostAPI, err error) {
 
 	groupAPI := groupRoot.Group(
 		postAPI.Options.Path,
-		postAPI.writeBasicHeaders,
-		postAPI.cors,
 	)
 
-	middlewares := append([]echo.MiddlewareFunc{postAPI.parseAPIRequests, postAPI.onRequestEvent}, postAPI.Options.Middlewares...)
+	middlewares := append([]echo.MiddlewareFunc{postAPI.cors, postAPI.writeBasicHeaders, postAPI.parseAPIRequests, postAPI.onRequestEvent}, postAPI.Options.Middlewares...)
 
 	groupAPI.Post("/:version", postAPI.rpcHandle, middlewares...)
+	groupAPI.Options("/:version", nil, postAPI.cors, postAPI.writeBasicHeaders)
 
 	httpSrv.SetHTTPErrorHandler(postAPI.errorHandle)
 	httpSrv.SetLogger(wrapperLogger(postAPI.Options.Logger))
