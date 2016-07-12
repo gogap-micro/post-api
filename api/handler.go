@@ -51,6 +51,7 @@ func (p *PostAPI) pingHandle(c echo.Context) (err error) {
 
 func (p *PostAPI) getRequestTimeout(r engine.Request) time.Duration {
 	strTimeout := r.Header().Get(APICallTimeoutHeader)
+	strTimeout = strings.TrimSpace(strTimeout)
 	if strTimeout == "" {
 		return time.Second * 30
 	}
@@ -144,7 +145,10 @@ func (p *PostAPI) rpcHandle(c echo.Context) (err error) {
 	isTimeout := false
 
 	timer := p.timerPool.Get().(*time.Timer)
-	defer p.timerPool.Put(timer)
+	defer func() {
+		timer.Stop()
+		p.timerPool.Put(timer)
+	}()
 
 	timer.Reset(callTimeout)
 
