@@ -40,7 +40,11 @@ func (p *PostAPI) writeBasicHeaders(next echo.HandlerFunc) echo.HandlerFunc {
 				c.Response().Header().Set(key, value)
 			}
 		}
-		return next(c)
+		if next != nil {
+			return next(c)
+		}
+
+		return
 	}
 }
 
@@ -54,7 +58,10 @@ func (p *PostAPI) parseAPIRequests(next echo.HandlerFunc) echo.HandlerFunc {
 
 		c.Set(apiRequestsKey, requests)
 
-		return next(c)
+		if next != nil {
+			return next(c)
+		}
+		return
 	}
 }
 
@@ -63,12 +70,18 @@ func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
 		// before request
 		if !p.Options.EnableRequestTopic || p.Options.Broker == nil {
-			return next(c)
+			if next != nil {
+				return next(c)
+			}
+			return
 		}
 
 		requests := APIRequestsFromContext(c)
 		if requests == nil {
-			return next(c)
+			if next != nil {
+				return next(c)
+			}
+			return
 		}
 
 		reqBody, _ := json.Marshal(requests)
@@ -81,7 +94,7 @@ func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 		p.Options.Broker.Publish(p.Options.RequestTopic, reqMsg)
 
 		// process others
-		if next(c) != nil {
+		if next != nil && next(c) != nil {
 			return
 		}
 
