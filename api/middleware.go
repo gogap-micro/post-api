@@ -95,6 +95,10 @@ func (p *PostAPI) onRequestEvent(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// process others
 		if next != nil && next(c) != nil {
+			if otherNextErr := next(c); otherNextErr != nil {
+				err = otherNextErr
+				return
+			}
 			return
 		}
 
